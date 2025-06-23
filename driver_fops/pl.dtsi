@@ -1,0 +1,14 @@
+/dts-v1/;
+/plugin/;
+/ {
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			inverter {
+				compatible = "xlnx,inverter_1.0";
+				status = "okay";
+				reg = <0xa0000000 0x1000>;
+			};
+		};
+	};
+};
