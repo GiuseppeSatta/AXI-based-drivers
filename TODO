@@ -1,3 +1,4 @@
 - Add README
 - Complete function library
 - Adapt interface functions to DMA
+- Re-add device tree parsing for DMA node
