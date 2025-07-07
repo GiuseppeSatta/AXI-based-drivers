@@ -20,51 +20,23 @@ static int major;
 static struct class *invchar_class;
 static void __iomem *mapped_mem;
 static struct of_device_id inverter_ids[] = {
-	{
-		.compatible = "xlnx,inverter_1.0",
+    {
+        .compatible = "xlnx,inverter_1.0",
 	}, { /* sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, inverter_ids);
+MODULE_DEVICE_TABLE(of, inverter_ids); 
 
 static int dt_probe(struct platform_device *);
 static int dt_remove(struct platform_device *);
 
 static struct platform_driver inverter = {
-	.probe = dt_probe,
+    .probe = dt_probe,
 	.remove = dt_remove,
 	.driver = {
-		.name = "inverter",
+        .name = "inverter",
 		.of_match_table = inverter_ids,
 	},
 };
-
-static int dt_probe(struct platform_device *pdev) {
-	struct device *dev = &pdev->dev;
-	int ret;
-
-	printk("dt_probe - Now I am in the probe function!\n");
-
-	/* Check for device properties */
-	if(!device_property_present(dev, "reg")) {
-		printk("dt_probe - Error! Device property 'reg' not found!\n");
-		return -1;
-	}
-
-	/* Read device properties */
-	ret = device_property_read_u32_array(dev, "reg", reg, 2);
-	if(ret) {
-		printk("dt_probe - Error! Could not read 'reg'\n");
-		return -1;
-	}
-	printk("dt_probe - reg: %x, %x\n", reg[0], reg[1]);
-
-	return 0;
-}
-
-static int dt_remove(struct platform_device *pdev) {
-	printk("dt_probe - Now I am in the remove function\n");
-	return 0;
-}
 
 static int inverter_open(struct inode *inode, struct file *file) {
     pr_info("inverter: device opened\n");
@@ -82,31 +54,34 @@ static int inverter_release(struct inode *inode, struct file *file) {
 }
 
 static ssize_t inverter_read(struct file *file, char __user *buf, size_t len, loff_t *offset) {
-    if (*offset >= MAP_SIZE)
-        return 0;
+    u32 val;
 
-    if (*offset + len > MAP_SIZE)
-        len = MAP_SIZE - *offset;
+    // Allow only 4-byte aligned, 32-bit accesses
+    if (len != 4 || *offset < 0 || *offset + 4 > MAP_SIZE || *offset % 4 != 0)
+        return -EINVAL;
 
-    if (copy_to_user(buf, (u8 __force *)mapped_mem + *offset, len))
+    val = readl(mapped_mem + *offset);
+
+    if (copy_to_user(buf, &val, sizeof(val)))
         return -EFAULT;
 
-    *offset += len;
-    return len;
+    *offset += 4;
+    return 4;
 }
 
 static ssize_t inverter_write(struct file *file, const char __user *buf, size_t len, loff_t *offset) {
-    if (*offset >= MAP_SIZE)
+    u32 val;
+
+    if (len != 4 || *offset < 0 || *offset + 4 > MAP_SIZE || *offset % 4 != 0)
         return -EINVAL;
 
-    if (*offset + len > MAP_SIZE)
-        len = MAP_SIZE - *offset;
-
-    if (copy_from_user((u8 __force *)mapped_mem + *offset, buf, len))
+    if (copy_from_user(&val, buf, sizeof(val)))
         return -EFAULT;
 
-    *offset += len;
-    return len;
+    writel(val, mapped_mem + *offset);
+
+    *offset += 4;
+    return 4;
 }
 
 
@@ -118,14 +93,25 @@ static struct file_operations fops = {
     .write = inverter_write
 };
 
-static int __init inverter_init(void) {
-    struct device *dev;
+static int dt_probe(struct platform_device *pdev) {
+    struct device *dev = &pdev->dev;
+	int ret;
+    
+	printk("dt_probe - Now I am in the probe function!\n");
 
-
-    if(platform_driver_register(&inverter)) {
-		printk("dt_probe - Error! Could not load driver\n");
+	/* Check for device properties */
+	if(!device_property_present(dev, "reg")) {
+		printk("dt_probe - Error! Device property 'reg' not found!\n");
 		return -1;
 	}
+
+	/* Read device properties */
+	ret = device_property_read_u32_array(dev, "reg", reg, 2);
+	if(ret) {
+		printk("dt_probe - Error! Could not read 'reg'\n");
+		return -1;
+	}
+	printk("dt_probe - reg: %x, %x\n", reg[0], reg[1]);
 
     // Allocate major number
     major = register_chrdev(0, DEVICE_NAME, &fops);
@@ -160,14 +146,35 @@ static int __init inverter_init(void) {
 
     pr_info("inverter: module loaded, mapped 0x%x bytes at phys 0x%x, virt %p\n", MAP_SIZE, PHYS_ADDR, mapped_mem);
 
-    return 0;
+	return 0;
 }
 
-static void __exit inverter_exit(void) {
+static int dt_remove(struct platform_device *pdev) {
+	printk("dt_probe - Now I am in the remove function\n");
     iounmap(mapped_mem);
     device_destroy(invchar_class, MKDEV(major, 0));
     class_destroy(invchar_class);
     unregister_chrdev(major, DEVICE_NAME);
+	return 0;
+}
+
+
+
+static int __init inverter_init(void) {
+
+
+    if(platform_driver_register(&inverter)) {
+		printk("dt_probe - Error! Could not load driver\n");
+		return -1;
+	}
+
+    
+
+    return 0;
+}
+
+static void __exit inverter_exit(void) {
+    
     platform_driver_unregister(&inverter);
     pr_info("invchar: module unloaded\n");
 }
