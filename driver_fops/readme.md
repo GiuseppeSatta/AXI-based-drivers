@@ -6,6 +6,8 @@ This kernel module provides a character device driver that maps a memory-mapped 
 
 The module is specifically written for platforms (such as Xilinx FPGAs or SoCs) that expose a memory-mapped register interface described in the device tree.
 
+This module was written for the purpose of learning and understanding PL driver development.
+
 ---
 
 ## Features
