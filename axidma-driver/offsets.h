@@ -43,5 +43,3 @@
 // addresses
 #define DMA_PHYS_ADDRESS 0xA0000000
 #define DMA_SIZE 0x10000
-#define FIFO__PHYS_ADDRESS 0x44a00000
-#define FIFO_SIZE 0x10000

@@ -1,61 +1,56 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/mman.h>
+#include <errno.h>
 
 #define DEVICE "/dev/axidma"
-#define MAP_SIZE 0x10000  // 64KB
-#define TEST_PATTERN 0xAB
+#define BUFFER_SIZE 4096
 
 int main() {
-    int fd = open(DEVICE, O_RDWR | O_SYNC);
+    int fd = open(DEVICE, O_RDWR);
     if (fd < 0) {
         perror("Failed to open device");
-        return EXIT_FAILURE;
+        return 1;
     }
 
-    // Allocate buffer to write
-    unsigned char write_buf[16];
-    memset(write_buf, TEST_PATTERN, sizeof(write_buf));
+    // Prepare some test data to write (MM2S)
+    char write_buf[BUFFER_SIZE];
+    for (int i = 0; i < BUFFER_SIZE; i++) {
+        write_buf[i] = (char)(i & 0xFF);
+    }
 
-    // Write to device
-    if (write(fd, write_buf, sizeof(write_buf)) < 0) {
+    // Write to device (starts MM2S DMA transfer)
+    ssize_t ret = write(fd, write_buf, BUFFER_SIZE);
+    if (ret < 0) {
         perror("Write failed");
         close(fd);
-        return EXIT_FAILURE;
+        return 1;
     }
+    printf("Wrote %zd bytes to device\n", ret);
 
-    // Read back from device
-    lseek(fd, 0, SEEK_SET);
-    unsigned char read_buf[16];
-    if (read(fd, read_buf, sizeof(read_buf)) < 0) {
+    // Clear read buffer
+    char read_buf[BUFFER_SIZE];
+    memset(read_buf, 0, BUFFER_SIZE);
+
+    // Read from device (starts S2MM DMA transfer)
+    ret = read(fd, read_buf, BUFFER_SIZE);
+    if (ret < 0) {
         perror("Read failed");
         close(fd);
-        return EXIT_FAILURE;
+        return 1;
     }
+    printf("Read %zd bytes from device\n", ret);
 
-    printf("Read values:\n");
-    for (int i = 0; i < sizeof(read_buf); ++i)
-        printf("0x%02x ", read_buf[i]);
+    // Print first 64 bytes of read data as hex
+    printf("First 64 bytes of read data:\n");
+    for (int i = 0; i < 64 && i < ret; i++) {
+        printf("%02x ", (unsigned char)read_buf[i]);
+        if ((i + 1) % 16 == 0)
+            printf("\n");
+    }
     printf("\n");
 
-    // mmap test
-    void *mapped = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mapped == MAP_FAILED) {
-        perror("mmap failed");
-        close(fd);
-        return EXIT_FAILURE;
-    }
-
-    printf("First 8 bytes via mmap: ");
-    for (int i = 0; i < 8; ++i)
-        printf("0x%02x ", ((unsigned char *)mapped)[i]);
-    printf("\n");
-
-    // Clean up
-    munmap(mapped, MAP_SIZE);
     close(fd);
-    return EXIT_SUCCESS;
+    return 0;
 }

@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+   fragment@0 {
+        target-path = "/";
+        __overlay__ { 
+            axi_dma_0: axi_dma_0@a0000000 {
+                compatible = "xlnx,axi-dma";
+                status = "okay";
+                reg = <0xa0000000 0x10000>;
+                interrupts = <0 89 4>, <0 90 4>;
+                interrupt-parent = <&gic>;
+                interrupt-names = "mm2s_introut", "s2mm_introut";
+
+                dma_channel_a0000000: dma-channel@a0000000 {
+                    compatible = "xlnx,axi-dma-mm2s-channel";
+                    interrupts = <0 89 4>;
+                    xlnx,datawidth = <0x20>;
+                    xlnx,device-id = <0x0>;
+                    dma-channels = <0x1>;
+                };
+            };
+        };
+    };
+};
