@@ -49,6 +49,12 @@ dma: dma-controller@... {
         xlnx,device-id = <1>;
     };
 };
+
+dmas {
+	compatible = "uniss,dmas";  //The compatible string has to be exactly as this one for the driver to function. 
+	status = "okay"; 
+	dev-handles = <&dma>;
+};
 ```
 
 ## Building the Module
@@ -124,6 +130,12 @@ ioctl(fd, IOCTL_DMA_WRITE_BUFFER, user_buffer);
 // Start transfer
 ioctl(fd, IOCTL_DMA_START_TRANSFER, length);
 
+//Select channel 1
+ioctl(fd, IOCTL_SELECT_CHANNEL, 1);
+
+//Start transfer
+ioctl(fd, IOCTL_DMA_START_TRANSFER, length);
+
 // Read data from S2MM buffer
 ioctl(fd, IOCTL_DMA_READ_BUFFER, user_buffer_out);
 
@@ -131,6 +143,8 @@ ioctl(fd, IOCTL_DMA_READ_BUFFER, user_buffer_out);
 unsigned int status;
 ioctl(fd, IOCTL_READ_STATUS_REGISTER, &status);
 ```
+
+*Note that this example isn't functional and is only for demonstration purposes. A functional userspace example is provided in 'dma_test.c' .
 
 ## Debugging
 
@@ -144,7 +158,8 @@ This module includes extensive `printk` logging to assist with debugging:
 
 - `mmap()` is implemented but marked obsolete and may need revision.
 - The module assumes `DMA_BIT_MASK(32)` support.
-- No interrupt support — relies on polling DMA status.
+- No interrupt support — relies on polling DMA status. Will be added in the future.
+- Currently no support for VDMA or Multi-channel DMA.
 
 ## License
 
