@@ -2,147 +2,274 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <stdint.h>
+#include <sys/ioctl.h>
 #include <string.h>
 #include <errno.h>
-#include <ctype.h>
 
-#define DEVICE_PATH "/dev/my_dma_chrdev"
-#define IMAGE_WIDTH 88
-#define IMAGE_HEIGHT 142
-#define IMAGE_SIZE (IMAGE_HEIGHT * IMAGE_WIDTH)
-#define IMAGE_DATA_SIZE (IMAGE_SIZE * 4)
-#define RESULT_SIZE 4
+#define DMA_MAGIC 'D'
+#define IOCTL_SELECT_CHANNEL     _IOW(DMA_MAGIC, 0, int)
+#define IOCTL_DMA_WRITE_BUFFER   _IOW(DMA_MAGIC, 1, unsigned char *)
+#define IOCTL_DMA_READ_BUFFER    _IOR(DMA_MAGIC, 2, unsigned char *)
+#define IOCTL_DMA_START_TRANSFER _IOW(DMA_MAGIC, 3, size_t)
+#define IOCTL_READ_STATUS_REGISTER     _IOR(DMA_MAGIC, 4, unsigned int*)
+#define IOCTL_DMA_RESET _IOW(DMA_MAGIC, 5, size_t)
+#define IOCTL_DMA_RESET_ALL _IOW(DMA_MAGIC, 6, size_t)
 
-int hexchar_to_int(char c) {
-    if ('0' <= c && c <= '9') return c - '0';
-    if ('A' <= c && c <= 'F') return c - 'A' + 10;
-    if ('a' <= c && c <= 'f') return c - 'a' + 10;
-    return -1;
-}
 
-uint8_t hex_to_byte(const char *hex) {
-    int high = hexchar_to_int(hex[0]);
-    int low  = hexchar_to_int(hex[1]);
-    if (high == -1 || low == -1) {
-        fprintf(stderr, "Invalid hex digit: %c%c\n", hex[0], hex[1]);
-        exit(EXIT_FAILURE);
-    }
-    return (high << 4) | low;
+
+#define DEVICE_FILE "/dev/uniss_dma"
+#define DMA_BUF_SIZE 65535
+
+void print_mem(void *virtual_address, int byte_count)
+{
+	char *data_ptr = virtual_address;
+
+	for (int i = 0; i < byte_count; i++)
+	{
+		printf("%02X", data_ptr[i]);
+
+		// print a space every 4 bytes (0 indexed)
+		if (i % 4 == 3)
+		{
+			printf(" ");
+		}
+	}
+
+	printf("\n");
 }
 
 int main() {
-    int fd;
-    ssize_t bytes_written, bytes_read;
-    uint32_t result;
-    uint32_t *image_data;
-
-    FILE *fp = fopen("input32.txt", "r");
-    if (!fp) {
-        perror("Failed to open file");
-        return 1;
-    }
-
-    size_t capacity = 256;
-    size_t count = 0;
-    uint32_t *buffer = malloc(capacity * sizeof(uint32_t));
-    if (!buffer) {
-        perror("malloc failed");
-        fclose(fp);
-        return 1;
-    }
-
-    char line[64];
-    while (fgets(line, sizeof(line), fp)) {
-        // Strip newline and whitespace
-        line[strcspn(line, "\r\n")] = 0;
-        int character=0;
-        while (line[character] && isspace(line[character]) && character < 64) ++character;
-
-        if (character == 64){
-            printf("\ncharacter reached 64\n");
-            return 0;
-        } 
-
-        if (strlen(line) != 8) {
-            fprintf(stderr, "Skipping invalid line: '%s'\n", line);
-            continue;
-        }
-
-        // Resize if needed
-        if (count >= capacity) {
-            capacity *= 2;
-            uint32_t *new_buf = realloc(buffer, capacity * sizeof(uint32_t));
-            if (!new_buf) {
-                perror("realloc failed");
-                free(buffer);
-                fclose(fp);
-                return 1;
-            }
-            buffer = new_buf;
-        }
-
-        // Safely parse 8-character hex string
-        uint32_t value = 0;
-        for (int i = 0; i < 4; ++i) {
-            value = (value << 8) | hex_to_byte(&line[i * 2]); // Big endian
-        }
-
-        buffer[count++] = value;
-    }
-
-    fclose(fp);
-
-
-
-
-    uint32_t *new_buf = realloc(buffer, IMAGE_SIZE * sizeof(uint32_t));
-    if (!new_buf) {
-        perror("realloc failed");
-        free(buffer);
-        fclose(fp);
-        return 1;
-    }
-
-    buffer = new_buf;
-    
-    image_data = buffer;
-
-    // Open device
-    fd = open(DEVICE_PATH, O_RDWR);
+    int fd = open(DEVICE_FILE, O_RDWR);
     if (fd < 0) {
         perror("Failed to open device");
-         
-        return EXIT_FAILURE;
+        return 1;
     }
 
-    // Write image data to device
-    bytes_written = write(fd, image_data, IMAGE_SIZE);
-    if (bytes_written < 0) {
-        perror("Failed to write to device");
+    int channel = 0;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
         close(fd);
-         
-        return EXIT_FAILURE;
-    } else if (bytes_written != IMAGE_SIZE) {
-        fprintf(stderr, "Incomplete write: %zd bytes\n", bytes_written);
+        return 1;
     }
 
-    // Read result from device
-    bytes_read = read(fd, &result, RESULT_SIZE);
-    if (bytes_read < 0) {
-        perror("Failed to read from device");
+    // Prepare dummy data
+    printf("Memory map the MM2S source address register blocks:\nTEXT\nKEY\nRC\1n");
+	unsigned int *virtual_src_TEXT_addr = (unsigned int*)malloc(65535);
+	unsigned int *virtual_src_KEY_addr = (unsigned int*)malloc(65535);
+
+	printf("Memory map the S2MM destination address register block:\nENCRYPTED\n");
+	unsigned int *virtual_dst_ENCRYPTED_addr = (unsigned int*)malloc(65535);
+
+    printf("Writing text, key and rc  data to userspace source buffers...\n");
+	// text data FFEEDDCCBBAA99887766554433221100
+	unsigned int j = 0x00000000;
+	// 16 * 32 bit word = 16 * 4 word
+	for (int i = 0; i < 16; ++i)
+	{
+		virtual_src_TEXT_addr[i] = j;
+		j = j + 0x11;
+	}
+	j = 0x00000000;
+	// key data 1F1E1D1C1B1A191817161514131211100F0E0D0C0B0A09080706050403020100
+	for (int i = 0; i < 32; ++i)
+	{
+		virtual_src_KEY_addr[i] = j;
+		j = j + 0x1;
+	}
+
+	// 16 * 4 byte = 16 * 32 bit
+	printf("Clearing the destination register block...\n");
+	memset(virtual_dst_ENCRYPTED_addr, 0, 16 * 4);
+
+	// print
+	printf("Text memory block data:      ");
+	print_mem(virtual_src_TEXT_addr, 16 * 4);
+	printf("Key memory block data:       ");
+	print_mem(virtual_src_KEY_addr, 32 * 4);
+
+	printf("Destination memory block data: ");
+	print_mem(virtual_dst_ENCRYPTED_addr, 16 * 4);
+
+    if (ioctl(fd, IOCTL_DMA_WRITE_BUFFER, virtual_src_TEXT_addr) < 0) {
+        perror("Failed to write buffer to DMA");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
         close(fd);
-         
-        return EXIT_FAILURE;
-    } else if (bytes_read != RESULT_SIZE) {
-        fprintf(stderr, "Incomplete read: %zd bytes\n", bytes_read);
+        return 1;
     }
 
-    printf("Received result: 0x%08X (%d)\n", result, result);
+    printf("DMA buffer written successfully.\n");
 
-    // Cleanup
+    channel = 1;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    if (ioctl(fd, IOCTL_DMA_WRITE_BUFFER, virtual_src_KEY_addr) < 0) {
+        perror("Failed to write buffer to DMA");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    printf("DMA buffer written successfully.\n");
+
+    channel = 0;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    if (ioctl(fd, IOCTL_DMA_RESET_ALL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    if (ioctl(fd, IOCTL_DMA_START_TRANSFER, 16) < 0) {
+        perror("Failed to start DMA transfer");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    printf("DMA transfer started.\n");
+
+    channel = 1;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    if (ioctl(fd, IOCTL_DMA_START_TRANSFER, 32) < 0) {
+        perror("Failed to start DMA transfer");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    printf("DMA transfer started.\n");
+
+    channel = 2;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    if (ioctl(fd, IOCTL_DMA_START_TRANSFER, 16) < 0) {
+        perror("Failed to start DMA transfer");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    printf("DMA transfer started.\n");
+
+    unsigned int *buffer;
+
+    channel = 0;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    do{
+    
+        if (ioctl(fd, IOCTL_READ_STATUS_REGISTER, buffer) < 0) {
+            perror("Failed to check status register");
+            free(virtual_src_TEXT_addr);
+        free(virtual_src_KEY_addr);
+        free(virtual_dst_ENCRYPTED_addr);
+            close(fd);
+            return 1;
+        }
+
+    } while(!(*buffer & (unsigned int)0x2));
+
+    channel = 1;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    do{
+    
+        if (ioctl(fd, IOCTL_READ_STATUS_REGISTER, buffer) < 0) {
+            perror("Failed to check status register");
+            free(virtual_src_TEXT_addr);
+        free(virtual_src_KEY_addr);
+        free(virtual_dst_ENCRYPTED_addr);
+            close(fd);
+            return 1;
+        }
+
+    } while(!(*buffer & (unsigned int)0x2));
+
+    channel = 2;
+    if (ioctl(fd, IOCTL_SELECT_CHANNEL, channel) < 0) {
+        perror("Failed to select DMA channel");
+        free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
+        close(fd);
+        return 1;
+    }
+
+    do{
+    
+        if (ioctl(fd, IOCTL_READ_STATUS_REGISTER, buffer) < 0) {
+            perror("Failed to check status register");
+            free(virtual_src_TEXT_addr);
+        free(virtual_src_KEY_addr);
+        free(virtual_dst_ENCRYPTED_addr);
+            close(fd);
+            return 1;
+        }
+
+    } while(!(*buffer & (unsigned int)0x2));
+
+    print_mem(virtual_dst_ENCRYPTED_addr, 16 * 4);
+
+    free(virtual_src_TEXT_addr);
+    free(virtual_src_KEY_addr);
+    free(virtual_dst_ENCRYPTED_addr);
     close(fd);
-     
-
-    return EXIT_SUCCESS;
+    return 0;
 }
