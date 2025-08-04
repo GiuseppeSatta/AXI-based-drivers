@@ -34,8 +34,8 @@ Example:
 dma: dma-controller@... {
     compatible = "xlnx,axi-dma";
     reg = <...>;
-    #address-cells = <1>;
-    #size-cells = <1>;
+    #address-cells = <2>;
+    #size-cells = <2>;
 
     channel@0 {
         mm2s = <1>;
