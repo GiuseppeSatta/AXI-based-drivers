@@ -156,9 +156,8 @@ This module includes extensive `printk` logging to assist with debugging:
 
 ## Known Limitations
 
-- `mmap()` is implemented but marked obsolete and may need revision.
 - The module assumes `DMA_BIT_MASK(32)` support.
-- No interrupt support — relies on polling DMA status. Will be added in the future.
+- No interrupt support — relies on polling DMA status. May be added in the future.
 - Currently no support for VDMA or Multi-channel DMA.
 
 ## License
