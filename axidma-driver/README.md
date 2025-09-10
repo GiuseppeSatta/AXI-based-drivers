@@ -17,8 +17,6 @@ The module allows user-space applications to:
 - Multi-channel DMA support via device tree parsing.
 - Coherent memory allocation for each DMA buffer.
 - Character device interface with `ioctl` operations.
-- Basic support for memory mapping (`mmap`) — partially implemented.
-- Platform driver using `of_device_id` for device tree compatibility.
 
 ## Device Tree Requirements
 
