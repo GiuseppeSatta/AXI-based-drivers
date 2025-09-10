@@ -55,6 +55,12 @@ dmas {
 };
 ```
 
+Compile with:
+
+```bash
+dtc pl.dtsi -o pl.dtbo
+```
+
 ## Building the Module
 
 ### Prerequisites
