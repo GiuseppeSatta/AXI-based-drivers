@@ -120,6 +120,8 @@ Once loaded, the module creates a character device:
 | `IOCTL_DMA_RESET`             | `_IOW('D', 5, size_t)`       | write     | Reset the selected DMA channel                |
 | `IOCTL_DMA_RESET_ALL`         | `_IOW('D', 6, size_t)`       | write     | Reset all DMA channels                        |
 
+*The order of the channel numbers is the same as the one specified in the device-tree.
+
 ## Usage Example (in C)
 
 ```c
