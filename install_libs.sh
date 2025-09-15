@@ -19,7 +19,7 @@ sudo apt install -y \
 	libssl-dev \
 	libncurses-dev \
 	wget \
-        curl \
+    curl \
 	vim \
 	libfdt-dev \
 	fpga-manager-xlnx \
@@ -29,7 +29,9 @@ sudo apt install -y \
 	autoconf \
 	libtool \
 	texinfo \
-	gcc-multilib
+	gcc-multilib \
+	libgles2-mesa-dev \
+	libegl1-mesa-dev
 										
 echo "All necessary packages have been installed."
 
