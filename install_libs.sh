@@ -3,7 +3,7 @@ et -e
 echo "Updating package list..."
 sudo apt update
 
-echo "Installing required packages for building kernel modules..."
+echo "Installing required packages for building kernel modules and OpenGL ES 2.0..."
 sudo apt install -y \
 	build-essential \
 	dkms \
@@ -31,7 +31,8 @@ sudo apt install -y \
 	texinfo \
 	gcc-multilib \
 	libgles2-mesa-dev \
-	libegl1-mesa-dev
+	libegl1-mesa-dev \
+	imagemagick
 										
 echo "All necessary packages have been installed."
 
