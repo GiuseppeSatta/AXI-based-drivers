@@ -12,6 +12,7 @@ sudo apt install -y \
 	make \
 	perl \
 	git \
+	dtc \
 	bc \
 	bison \
 	flex \
