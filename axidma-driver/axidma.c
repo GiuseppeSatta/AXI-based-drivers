@@ -99,8 +99,8 @@ int sync_dma_to_idle(void *, int);
 int sync_dma_to_halted(void *, int);
 
 int sync_dma_to_idle(void __iomem *regs, int direction){
-
-    for(int i=0;i<DMA_SYNC_TIMEOUT;i++){
+    int i;
+    for(i=0;i<DMA_SYNC_TIMEOUT;i++){
         if((*(unsigned int *)(regs+(direction==0?S2MM_DMASR:MM2S_DMASR))) & DMA_IDLE_MASK){
             return i;
         }
@@ -111,8 +111,8 @@ int sync_dma_to_idle(void __iomem *regs, int direction){
 }
 
 int sync_dma_to_halted(void __iomem *regs, int direction){
-
-    for(int i=0;i<DMA_SYNC_TIMEOUT;i++){
+int i;
+    for(i=0;i<DMA_SYNC_TIMEOUT;i++){
         if((*(unsigned int *)(regs+(direction==0?S2MM_DMASR:MM2S_DMASR))) & DMA_HALTED_MASK){
             return i;
         }
@@ -148,6 +148,7 @@ static long uniss_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
     u32 direction = ud->channels[selected_channel].direction;
 
     switch (cmd) {
+        int i;
         case IOCTL_SELECT_CHANNEL:
             if (arg >= ud->num_channels|| selected_channel < 0) {
                 pr_err("Invalid DMA channel selected\n");
@@ -302,7 +303,8 @@ static long uniss_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
             break;
         case IOCTL_DMA_RESET_ALL:
             printk("Resetting all DMAs...\n");
-            for(int i=0; i<ud->num_channels;i++){
+            
+            for(i=0; i<ud->num_channels;i++){
                 iowrite32(RESET_DMA,ud->channels[i].regs+(ud->channels[i].direction?MM2S_DMACR:S2MM_DMACR));
             }
             printk("All DMAs have been reset.\n");
@@ -443,7 +445,7 @@ static int uniss_dmas_probe(struct platform_device *pdev)
     alloc_chrdev_region(&uniss_dev_t, 0, 1, "uniss_dma");
     cdev_init(&uniss_dev->cdev, &uniss_fops);
     cdev_add(&uniss_dev->cdev, uniss_dev_t, 1);
-    uniss_class = class_create("uniss_dma");
+    uniss_class = class_create(THIS_MODULE,"uniss_dma");
     device_create(uniss_class, NULL, uniss_dev_t, NULL, "uniss_dma");
 
     platform_set_drvdata(pdev, uniss_dev);
@@ -512,3 +514,4 @@ module_platform_driver(uniss_dmas_driver);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Giuseppe Satta");
 MODULE_DESCRIPTION("DMA aggregator probing TX channels via dev-handles");
+
